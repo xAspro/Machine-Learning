@@ -6,22 +6,26 @@ from scipy.stats import chi2
 dose = np.array([0.1, 0.3, 0.4, 0.5, 0.55, 0.7, 0.8, 1.0])
 efficiency = np.array([False, False, False, True, False, True, True, True])
 
-print("----- Initial Data -----")
-print("Dose")
-for i in range(len(dose)):
-    print(dose[i])
+# # For checking against Logistic Regression Calculator
+# print("----- Initial Data -----")
+# print("Dose")
+# for i in range(len(dose)):
+#     print(dose[i])
 
-print("\nEfficiency")
-for i in range(len(efficiency)):
-    print(efficiency[i].astype(int))
+# print("\nEfficiency")
+# for i in range(len(efficiency)):
+#     print(efficiency[i].astype(int))
 
-print("------------------------\n")
+# print("------------------------\n")
 
-def plot_data(dose, efficiency, title, fitted_curve=None):
+def plot_data(dose, efficiency, title, fitted_curves=None):
     plt.scatter(dose, efficiency, c=efficiency, cmap='coolwarm_r')
-    if fitted_curve is not None:
+    if fitted_curves is not None:
         dose_range = np.linspace(min(dose), max(dose), 100)
-        plt.plot(dose_range, fitted_curve(dose_range), color='black', label='Fitted Curve')
+
+        for curve_fn, label, style in fitted_curves:
+            plt.plot(dose_range, curve_fn(dose_range), label=label, **style)
+
         plt.legend()
     plt.colorbar(label='Efficiency')
     plt.xlabel('Dose')
@@ -45,38 +49,51 @@ def logit(p):
 def inverse_logit(logit_value):
     return 1 / (1 + np.exp(-logit_value))
 
-def log_likelihood(params, dose, efficiency):
-    k, x0 = params
-    logit_eff = k * (dose - x0)
-    prob_eff = inverse_logit(logit_eff)
-    ll = np.sum(efficiency * np.log(prob_eff + 1e-12) + (1 - efficiency) * np.log(1 - prob_eff + 1e-12))
+def bernoulli_log_likelihood(logits, y, eps=1e-12):
+    p = inverse_logit(logits)
+    p = np.clip(p, eps, 1 - eps)
+
+    ll = np.sum(y * np.log(p) + (1 - y) * np.log(1 - p))
     return ll
 
-# Transforming the data for better fitting
-# logit_efficiency = logit(efficiency.astype(float) + 1e-12)  # add small value to avoid log(0)
+def log_likelihood_k_x0(params, dose, efficiency):
+    k, x0 = params
+    logit_eff = k * (dose - x0)
 
-# fitted_curve = partial(restricted_sigmoid, params=(100, 0.5))
-# plot_data(dose, efficiency, fitted_curve=fitted_curve)
+    ll = bernoulli_log_likelihood(logit_eff, efficiency)
+    return ll
+
+def log_likelihood_w_b(params, dose, efficiency):
+    w, b = params
+    logit_eff = w * dose + b
+    
+    ll = bernoulli_log_likelihood(logit_eff, efficiency)
+    return ll
 
 # McFadden R² calculation
-def r2_score(params, efficiency, dose, ll_model, ll_null):
+def r2_score(ll_model, ll_null):
     r2 = 1 - (ll_model / ll_null)
     return r2
 
-def p_value(params, dose, efficiency, ll_model, ll_null):
+def p_value(ll_model, ll_null):
     lr_stat = 2 * (ll_model - ll_null)
     p_val = 1 - chi2.cdf(lr_stat, df=1)
     return p_val
 
-def calculate_ll(params_1, dose, efficiency):
-    params_2 = (0, 0)  # Null model with no predictors
-    ll_model = log_likelihood(params_1, dose, efficiency)
-    ll_null = log_likelihood(params_2, dose, efficiency)
-    return ll_model, ll_null
+def calculate_ll(params_1, params_2, dose, efficiency):
+    param_null_k_x0 = (0, np.mean(dose))
+    param_null_w_b = (0, logit(np.mean(efficiency.astype(float))))
 
-def gradient_descent(params, dose, efficiency, learning_rate, num_iterations, tol=1e-12):
+    ll_model_k_x0 = log_likelihood_k_x0(params_1, dose, efficiency)
+    ll_null_k_x0 = log_likelihood_k_x0(param_null_k_x0, dose, efficiency)
+
+    ll_model_w_b = log_likelihood_w_b(params_2, dose, efficiency)
+    ll_null_w_b = log_likelihood_w_b(param_null_w_b, dose, efficiency)
+    return ll_model_k_x0, ll_null_k_x0, ll_model_w_b, ll_null_w_b
+
+def gradient_descent_k_x0(params, dose, efficiency, learning_rate, num_iterations, tol=1e-12):
     k, x0 = params
-    prev_cost = log_likelihood((k, x0), dose, efficiency)
+    prev_cost = log_likelihood_k_x0((k, x0), dose, efficiency)
     for _ in range(num_iterations):
         logit_eff = k * (dose - x0)
         prob_eff = inverse_logit(logit_eff)
@@ -89,54 +106,101 @@ def gradient_descent(params, dose, efficiency, learning_rate, num_iterations, to
         k += learning_rate * dk
         x0 += learning_rate * dx0
 
-        current_cost = log_likelihood((k, x0), dose, efficiency)
-        # print(f"Current Log-Likelihood: {current_cost}")
-        # print(f"Parameters: k={k}, x0={x0}")
-        # print("prev_cost:", prev_cost, "current_cost:", current_cost)
-        # print("current_cost - prev_cost:", current_cost - prev_cost)
-        # print("-----\n")
+        current_cost = log_likelihood_k_x0((k, x0), dose, efficiency)
+
         if abs(current_cost - prev_cost) < tol:
-            print("\t\t\t\tConvergence reached.")
+            print("\t\t\t\tConvergence in z = k*(x - x0), reached in {} iterations.".format(_))
+            print("\t\t\t\tFinal parameters: k = {}, x0 = {}".format(k, x0))
+            print("\t\t\t\tFinal Log-Likelihood: {}".format(current_cost))
             break
 
         prev_cost = current_cost
 
-        # if _ == 10:
-        #     break
-
     return k, x0
 
-def run_regression(dose, efficiency, learning_rate=0.01, num_iterations=10000):
-    initial_params = (1, 0.35)  # Initial guess for k and x0
-    optimized_params = gradient_descent(initial_params, dose, efficiency, learning_rate, num_iterations)
-    ll_model, ll_null = calculate_ll(optimized_params, dose, efficiency)
+def gradient_descent_w_b(params, dose, efficiency, learning_rate, num_iterations, tol=1e-12):
+    w, b = params
+    prev_cost = log_likelihood_w_b((w, b), dose, efficiency)
+    for _ in range(num_iterations):
+        logit_eff = w * dose + b
+        prob_eff = inverse_logit(logit_eff)
 
-    cost = log_likelihood(optimized_params, dose, efficiency)
-    r2 = r2_score(optimized_params, efficiency, dose, ll_model, ll_null)
-    p_val = p_value(optimized_params, dose, efficiency, ll_model, ll_null)
+        error = efficiency - prob_eff
+
+        dw = np.sum(error * dose)
+        db = np.sum(error)
+
+        w += learning_rate * dw
+        b += learning_rate * db
+
+        current_cost = log_likelihood_w_b((w, b), dose, efficiency)
+
+        if abs(current_cost - prev_cost) < tol:
+            print("\t\t\t\tConvergence in z = w*x + b, reached in {} iterations.".format(_))
+            print("\t\t\t\tFinal parameters: w = {}, b = {}".format(w, b))
+            print("\t\t\t\tFinal Log-Likelihood: {}".format(current_cost))
+            break
+
+        prev_cost = current_cost
+
+    return w, b
+
+def run_regression(dose, efficiency, learning_rate_k_x0=0.01, learning_rate_w_b=0.3, num_iterations=10000):
+    def transform_params_k_x0_to_w_b(params):
+        k, x0 = params
+        w = k
+        b = -k * x0
+        return (w, b)
+    
+    initial_params_k_x0 = (1, 0.1)  # Initial guess for k and x0
+    initial_params_w_b = transform_params_k_x0_to_w_b(initial_params_k_x0)
+
+    optimized_params_k_x0 = gradient_descent_k_x0(initial_params_k_x0, dose, efficiency, learning_rate_k_x0, num_iterations)
+    optimized_params_w_b = gradient_descent_w_b(initial_params_w_b, dose, efficiency, learning_rate_w_b, num_iterations)
+    ll_model_k_x0, ll_null_k_x0, ll_model_w_b, ll_null_w_b = calculate_ll(optimized_params_k_x0, optimized_params_w_b, dose, efficiency)
+
+    r2_k_x0 = r2_score(ll_model_k_x0, ll_null_k_x0)
+    p_val_k_x0 = p_value(ll_model_k_x0, ll_null_k_x0)
+    r2_w_b = r2_score(ll_model_w_b, ll_null_w_b)
+    p_val_w_b = p_value(ll_model_w_b, ll_null_w_b)
+
+    optimized_params = [optimized_params_k_x0, optimized_params_w_b]
+
     print("\n----- Optimization Results -----")
     print("Function: restricted sigmoid function at z = k*(x - x0)")
-    print(f"Optimized Parameters: k={optimized_params[0]}, x0={optimized_params[1]}")
-    print(f"Final Log-Likelihood: {cost}")
-    print(f"McFadden R²: {r2}")
-    print(f"P-value: {p_val}")
+    print(f"Optimized Parameters: k={optimized_params_k_x0[0]}, x0={optimized_params_k_x0[1]}")
+    print(f"Final Log-Likelihood: {ll_model_k_x0}")
+    print(f"McFadden R²: {r2_k_x0}")
+    print(f"P-value: {p_val_k_x0}")
+    print("--------------------------------")
+    print("Function: linear logit function at z = w*x + b")
+    print(f"Optimized Parameters: w={optimized_params_w_b[0]}, b={optimized_params_w_b[1]}")
+    print(f"Final Log-Likelihood: {ll_model_w_b}")
+    print(f"McFadden R²: {r2_w_b}")
+    print(f"P-value: {p_val_w_b}")
     print("---------------------------------\n")
+
+    if r2_w_b < r2_k_x0 and p_val_w_b > p_val_k_x0:
+        print("Better model: restricted sigmoid function at z = k*(x - x0)")
+    elif r2_k_x0 < r2_w_b and p_val_k_x0 > p_val_w_b:
+        print("Better model: linear logit function at z = w*x + b")
+    else:
+        print("Models have mixed performance; further analysis may be needed.")
 
     return optimized_params
 
 def main():
-    initial_params = (1.0, 0.3)  # Initial guess for k and x0
-    ll_model, ll_null = calculate_ll(initial_params, dose, efficiency)
-    r2 = r2_score(initial_params, efficiency, dose, ll_model, ll_null)
-    p_val = p_value(initial_params, dose, efficiency, ll_model, ll_null)
+    optimal_params = run_regression(dose, efficiency, learning_rate_k_x0=0.01, learning_rate_w_b=0.3, num_iterations=20000)
 
-    optimal_params = run_regression(dose, efficiency, learning_rate=0.01, num_iterations=500000)
-
-    def fitted_curve(x, params=initial_params):
+    def fitted_curve_k_x0(x, params):
         return inverse_logit(params[0] * (x - params[1]))
+    def fitted_curve_w_b(x, params):
+        return inverse_logit(params[0] * x + params[1])
+
+    curve_k_x0 = (partial(fitted_curve_k_x0, params=optimal_params[0]), "z = k*(x - x0)", {"color": "black", "linestyle": "dashed"})
+    curve_w_b = (partial(fitted_curve_w_b, params=optimal_params[1]), "z = w*x + b", {"color": "green", "linestyle": "dotted"})
     
-    plot_data(dose, efficiency, title='Initial Guess', fitted_curve=fitted_curve)
-    plot_data(dose, efficiency, title='Optimized Parameters', fitted_curve=partial(fitted_curve, params=optimal_params))
+    plot_data(dose, efficiency, title='Fitted Curves', fitted_curves=[curve_k_x0, curve_w_b])
 
 
 if __name__ == "__main__":
