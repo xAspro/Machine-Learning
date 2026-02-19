@@ -167,13 +167,15 @@ def run_regression(dose, efficiency, learning_rate_k_x0=0.01, learning_rate_w_b=
     optimized_params = [optimized_params_k_x0, optimized_params_w_b]
 
     print("\n----- Optimization Results -----")
-    print("Function: restricted sigmoid function at z = k*(x - x0)")
+    print("Model: sigmoid with shift parameterization (z = k*(x - x0))")
+    print("Used learning rate:", learning_rate_k_x0)
     print(f"Optimized Parameters: k={optimized_params_k_x0[0]}, x0={optimized_params_k_x0[1]}")
     print(f"Final Log-Likelihood: {ll_model_k_x0}")
     print(f"McFadden R²: {r2_k_x0}")
     print(f"P-value: {p_val_k_x0}")
     print("--------------------------------")
-    print("Function: linear logit function at z = w*x + b")
+    print("Model: sigmoid with linear parameterization (z = w*x + b)")
+    print("Used learning rate:", learning_rate_w_b)
     print(f"Optimized Parameters: w={optimized_params_w_b[0]}, b={optimized_params_w_b[1]}")
     print(f"Final Log-Likelihood: {ll_model_w_b}")
     print(f"McFadden R²: {r2_w_b}")

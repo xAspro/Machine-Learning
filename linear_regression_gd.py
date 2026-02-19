@@ -43,18 +43,18 @@ def prepare_features(features):  # Feature Scaling
     X_scaled = (X - mean) / std
     return X_scaled, mean, std
 
-def SSE(X, y, w, b):    # Sum of Squared Errors
+def sse(X, y, w, b):    # Sum of Squared Errors
     y_pred = X @ w + b
     return np.sum((y - y_pred) ** 2)
 
-def SS_total(y):   # Total Sum of Squares
+def ss_total(y):   # Total Sum of Squares
     y_mean = np.mean(y)
     sst = np.sum((y - y_mean) ** 2)
     return sst
 
 def compute_cost(X, y, w, b):   # Mean Squared Error Cost Function
     m = X.shape[0]
-    cost = SSE(X, y, w, b) / (2 * m)
+    cost = sse(X, y, w, b) / (2 * m)
     return cost
 
 def gradient_descent(X, y, w, b, learning_rate, num_iterations, tol=1e-12):   # Gradient Descent Algorithm
@@ -89,9 +89,9 @@ def gradient_descent(X, y, w, b, learning_rate, num_iterations, tol=1e-12):   # 
     print("\t\t\t\tMax iterations reached.")
     return w, b
 
-def R2_score(x, y, w, b):   # R-squared Calculation
-    sse = SSE(x, y, w, b)
-    sst = SS_total(y)
+def r2_score(x, y, w, b):   # R-squared Calculation
+    sse = sse(x, y, w, b)
+    sst = ss_total(y)
 
     assert sst != 0, "Total Sum of Squares (SST) cannot be zero."
 
@@ -99,8 +99,8 @@ def R2_score(x, y, w, b):   # R-squared Calculation
     return r2
 
 def f_score(x, y, w, b):   # F-score Calculation
-    sse = SSE(x, y, w, b)
-    sst = SS_total(y)
+    sse = sse(x, y, w, b)
+    sst = ss_total(y)
 
     n = x.shape[0]
     p = x.shape[1]
@@ -132,7 +132,7 @@ def run_regression(features, target, learning_rate=0.1, num_iterations=500000): 
     X = np.column_stack(features)
 
     cost = compute_cost(X, target, w, b)
-    r2 = R2_score(X, target, w, b)
+    r2 = r2_score(X, target, w, b)
     f = f_score(X, target, w, b)
     p = p_value(f, X.shape[0], X.shape[1])
     
