@@ -1,4 +1,6 @@
 import numpy as np
+import pandas as pd
+import sys
 
 # Loves Popcorn, Loves Soda, Age, Loves Movie
 # True,True,7,False
@@ -9,7 +11,7 @@ import numpy as np
 # True,False,50,False
 # False,False,83,False
 
-column_names = ["Loves Popcorn", "Loves Soda", "Age", "Loves Movie"]
+feature_names = ["Loves Popcorn", "Loves Soda", "Age", "Loves Movie"]
 data = np.array([
     [1, 1, 7, 0],
     [1, 0, 12, 0],
@@ -22,29 +24,105 @@ data = np.array([
 
 
 class Node:
-    def __init__(self, feature_index=None, threshold=None, left=None, right=None, prediction=None):
+    def __init__(self, feature_index=None, threshold=None, 
+                 left=None, right=None, prediction=None,
+                 gini=None, num_samples=None, num_samples_per_class=None):
         self.feature_index = feature_index
         self.threshold = threshold
         self.left = left
         self.right = right
         self.prediction = prediction
+        self.gini = gini
+        self.num_samples = num_samples
+        self.num_samples_per_class = num_samples_per_class
 
 def gini_impurity(y):
-    print("Calculating Gini impurity for labels:", y)
     classes, counts = np.unique(y, return_counts=True)
     probabilities = counts / counts.sum()
-    print("Classes:", classes)
-    print("counts:", counts)
-    print("total count:", counts.sum())
-    print("total count check (should match total count):", len(y))
-    print("probabilities:", probabilities)
     return 1 - np.sum(probabilities ** 2)
 
 print("Gini impurity of the whole dataset:", gini_impurity(data[:, -1]))
 
-## NEED TO CHECK IF THIS WILL WORK FOR NON CATEGORICAL Y TOO
+def best_split(X, y):
+    num_samples, num_features = X.shape
+    best_gini = float('inf')
+    best_feature_index = None
+    best_threshold = None
 
-## BUT ANYWAYS< FOR CATEGORICAL Y
-## MAKE A CATEGORY VARIABLE FOR EACH FEATURE
-## IF THE CATEGORY TYPE IS CATEGORICAL, IT IS SIMPLE
-## IF THE CATEGORY TYPE IS NUMERIC, THEN WE CAN CHECK ALL POSSIBLE THRESHOLDS
+    for feature_index in range(num_features):
+        unique_values = np.unique(X[:, feature_index])
+        thresholds = (unique_values[:-1] + unique_values[1:]) / 2
+        for threshold in thresholds:
+            left_indices = X[:, feature_index] <= threshold
+            right_indices = X[:, feature_index] > threshold
+
+            if len(y[left_indices]) == 0 or len(y[right_indices]) == 0:
+                continue
+
+            gini_left = gini_impurity(y[left_indices])
+            gini_right = gini_impurity(y[right_indices])
+            gini_split = (len(y[left_indices]) * gini_left + len(y[right_indices]) * gini_right) / num_samples
+
+            if gini_split < best_gini:
+                best_gini = gini_split
+                best_feature_index = feature_index
+                best_threshold = threshold
+
+    return best_feature_index, best_threshold
+
+def build_tree(X, y, depth=0, max_depth=3):
+    if len(set(y)) == 1:
+        return Node(prediction=y[0], gini=0.0, num_samples=len(y), num_samples_per_class=np.bincount(y))
+    if depth >= max_depth:
+        majority_class = np.bincount(y).argmax()
+        return Node(prediction=majority_class, gini=gini_impurity(y), num_samples=len(y), num_samples_per_class=np.bincount(y))
+    
+    feature_index, threshold = best_split(X, y)
+    if feature_index is None:
+        majority_class = np.bincount(y).argmax()
+        return Node(prediction=majority_class, gini=gini_impurity(y), num_samples=len(y), num_samples_per_class=np.bincount(y))
+    
+    left_indices = X[:, feature_index] <= threshold
+    right_indices = X[:, feature_index] > threshold
+    left_subtree = build_tree(X[left_indices], y[left_indices], depth + 1, max_depth)
+    right_subtree = build_tree(X[right_indices], y[right_indices], depth + 1, max_depth)
+    return Node(feature_index=feature_index, threshold=threshold, left=left_subtree, right=right_subtree, gini=gini_impurity(y), num_samples=len(y), num_samples_per_class=np.bincount(y))
+
+X = data[:, :-1]
+y = data[:, -1].astype(int)
+tree = build_tree(X, y)
+
+
+def print_tree(node, feature_names, depth=0):
+    indent = "|   " * depth
+
+    counts_str = ", ".join(
+        f"class {i}: {count}"
+        for i, count in enumerate(node.num_samples_per_class)
+    )
+
+    if node.prediction is not None:
+        print(indent + f"Leaf:")
+        print(indent)
+        print(indent + f"  Predict: {node.prediction}")
+        print(indent)
+        print(indent + f"  Gini: {node.gini:.3f}")
+        print(indent + f"  Samples: {node.num_samples}")
+        print(indent + f"  Counts: {counts_str}")
+        return
+
+    feature_name = feature_names[node.feature_index]
+
+    print(indent + f"{feature_name} <= {node.threshold:.2f}")
+    print(indent + f"  Gini: {node.gini:.3f}")
+    print(indent + f"  Samples: {node.num_samples}")
+    print(indent + f"  Counts: {counts_str}")
+
+    print_tree(node.left, feature_names, depth + 1)
+
+    print(indent + f"{feature_name} > {node.threshold:.2f}")
+    print_tree(node.right, feature_names, depth + 1)
+
+
+print("\nDecision Tree Structure:")
+print_tree(tree, feature_names)
