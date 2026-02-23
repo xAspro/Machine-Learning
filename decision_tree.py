@@ -27,6 +27,7 @@ import matplotlib.pyplot as plt
 # Random data set for testing the decision tree implementation
 URL = "https://raw.githubusercontent.com/Anny8910/Decision-Tree-Classification-on-Diabetes-Dataset/master/diabetes_dataset.csv"
 MAX_DEPTH = 3
+MIN_SAMPLES_LEAF = 10
 
 df = pd.read_csv(URL)
 
@@ -38,9 +39,17 @@ data = df.values
 
 
 class Node:
-    def __init__(self, feature_index=None, threshold=None, 
-                 left=None, right=None, prediction=None,
-                 gini=None, num_samples=None, num_samples_per_class=None):
+    def __init__(
+        self,
+        feature_index=None,
+        threshold=None,
+        left=None,
+        right=None,
+        prediction=None,
+        gini=None,
+        num_samples=None,
+        num_samples_per_class=None,
+    ):
         self.feature_index = feature_index
         self.threshold = threshold
         self.left = left
@@ -56,7 +65,7 @@ def gini_impurity(y):
     return 1 - np.sum(probabilities ** 2)
 
 
-def best_split(X, y):
+def best_split(X, y, min_samples_leaf=1):
     total_samples, num_features = X.shape
     best_gini = float('inf')
     best_feature_index = None
@@ -72,6 +81,9 @@ def best_split(X, y):
             if len(y[left_indices]) == 0 or len(y[right_indices]) == 0:
                 continue
 
+            if len(y[left_indices]) < min_samples_leaf or len(y[right_indices]) < min_samples_leaf:
+                continue
+
             gini_left = gini_impurity(y[left_indices])
             gini_right = gini_impurity(y[right_indices])
             gini_split = (len(y[left_indices]) * gini_left + len(y[right_indices]) * gini_right) / total_samples
@@ -83,12 +95,14 @@ def best_split(X, y):
 
     return best_feature_index, best_threshold
 
-def build_tree(X, y, depth=0, max_depth=3, num_classes=None):
+def build_tree(X, y, depth=0, max_depth=3, num_classes=None, min_samples_leaf=1):
     if num_classes is None:
         # On the first call, set num_classes based on full dataset
         num_classes = len(np.unique(y))
 
     # Leaf node: all labels the same
+    # Doesnt work if min_samples_leaf is set to a value greater than 1, 
+    # because it will stop splitting before all labels are the same
     if len(set(y)) == 1:
         return Node(
             prediction=y[0],
@@ -106,7 +120,7 @@ def build_tree(X, y, depth=0, max_depth=3, num_classes=None):
             num_samples_per_class=np.bincount(y, minlength=num_classes)
         )
     
-    feature_index, threshold = best_split(X, y)
+    feature_index, threshold = best_split(X, y, min_samples_leaf=min_samples_leaf)
 
     if feature_index is None:
         majority_class = np.bincount(y).argmax()
@@ -120,8 +134,8 @@ def build_tree(X, y, depth=0, max_depth=3, num_classes=None):
     left_indices = X[:, feature_index] <= threshold
     right_indices = X[:, feature_index] > threshold
 
-    left_subtree = build_tree(X[left_indices], y[left_indices], depth + 1, max_depth, num_classes)
-    right_subtree = build_tree(X[right_indices], y[right_indices], depth + 1, max_depth, num_classes)
+    left_subtree = build_tree(X[left_indices], y[left_indices], depth + 1, max_depth, num_classes, min_samples_leaf)
+    right_subtree = build_tree(X[right_indices], y[right_indices], depth + 1, max_depth, num_classes, min_samples_leaf)
 
     return Node(
         feature_index=feature_index,
@@ -183,7 +197,7 @@ def predict(node, sample):
 
 X = data[:, :-1]
 y = data[:, -1].astype(int)
-tree = build_tree(X, y, max_depth=MAX_DEPTH)
+tree = build_tree(X, y, max_depth=MAX_DEPTH, min_samples_leaf=MIN_SAMPLES_LEAF)
 predictions = np.array([predict(tree, sample) for sample in X])
 accuracy = np.mean(predictions == y)
 
