@@ -42,8 +42,8 @@ def bootstrapping(data, n_samples=None):
 def random_forest(data, n_trees=10, n_samples=None, n_features=None, max_depth=decision_tree.MAX_DEPTH, min_samples_leaf=decision_tree.MIN_SAMPLES_LEAF):
     trees = []
     for i in range(n_trees):
-        if (i + 1) % 50 == 0:
-            print(f"\nBuilding tree {i+1}/{n_trees}\ndata.shape[1]: {data.shape[1]}, n_samples: {n_samples}, n_features: {n_features}, max_depth: {max_depth}, min_samples_leaf: {min_samples_leaf}")
+        # if (i + 1) % 50 == 0:
+        #     print(f"\nBuilding tree {i+1}/{n_trees}\ndata.shape[1]: {data.shape[1]}, n_samples: {n_samples}, n_features: {n_features}, max_depth: {max_depth}, min_samples_leaf: {min_samples_leaf}")
         bootstrapped_data = bootstrapping(data, n_samples)
         tree = decision_tree.build_tree(bootstrapped_data[:, :-1], bootstrapped_data[:, -1].astype(int), max_depth=max_depth, min_samples_leaf=min_samples_leaf, n_features=n_features)
         trees.append(tree)
@@ -83,7 +83,7 @@ def f1_score(cm):
 def evaluate_random_forest(n_trees=100, n_features=3, max_depth=5, min_samples_leaf=5, return_metrics=False):
     print("\nBuilding random forest...")
     print(f"n_trees: {n_trees}, n_features: {n_features}, max_depth: {max_depth}, min_samples_leaf: {min_samples_leaf}\n\n")
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, stratify=y)
     data_train = np.hstack((X_train, y_train.reshape(-1, 1)))
     forest = random_forest(data_train, n_trees=n_trees, n_features=n_features, max_depth=max_depth, min_samples_leaf=min_samples_leaf)
 
@@ -92,8 +92,8 @@ def evaluate_random_forest(n_trees=100, n_features=3, max_depth=5, min_samples_l
     # print(f"Random Forest Accuracy: {accuracy:.4f}")
 
     cm = confusion_matrix(y_test, predictions)
-    # print("Confusion Matrix:")
-    # print(cm)
+    print("Confusion Matrix:")
+    print(cm)
 
     # print(f"Specificity: {specificity(cm):.4f}")
     # print(f"Sensitivity: {sensitivity(cm):.4f}")
@@ -110,21 +110,12 @@ def evaluate_random_forest(n_trees=100, n_features=3, max_depth=5, min_samples_l
         }
     
 def main():
-    # n_tree_values = [80, 100, 120]
-    # n_feature_values = [5, 6, 7]
-    # max_depth_values = [7, 8, 9, 10]
-    # min_samples_leaf_values = [15, 20, 25]
 
-    # After running this, we got 100, 5, 8/9, 15 as the best parameters
+    # After multiple runs, these values seem to give the best results
     n_tree_values = [100]
-    n_feature_values = [5]
-    max_depth_values = [8]
-    min_samples_leaf_values = [15]
-
-    # n_tree_values = [100, 120]
-    # n_feature_values = [5, 7]
-    # max_depth_values = [8, 9]
-    # min_samples_leaf_values = [15, 20]
+    n_feature_values = [3]
+    max_depth_values = [5]
+    min_samples_leaf_values = [5]
 
 
     results = []
@@ -153,10 +144,9 @@ def main():
 
     results_df = pd.DataFrame(results)
     print("\nRandom Forest Hyperparameter Tuning Results:")
-    print(results_df.sort_values("f1_score", ascending=False).reset_index(drop=True)[:20])
+    print(results_df.sort_values("f1_score", ascending=False).reset_index(drop=True)[:200])
 
 if __name__ == "__main__":
     main()
 
     
-
