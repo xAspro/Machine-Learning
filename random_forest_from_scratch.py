@@ -80,18 +80,17 @@ def f1_score(cm):
     sens = sensitivity(cm)
     return 2 * (prec * sens) / (prec + sens) if (prec + sens) > 0 else 0
 
-def evaluate_random_forest(n_trees=100, n_features=3, max_depth=5, min_samples_leaf=5, return_metrics=False):
+def evaluate_random_forest(X_train, Y_train, X_dev, Y_dev, n_trees=100, n_features=3, max_depth=5, min_samples_leaf=5, return_metrics=False):
     print("\nBuilding random forest...")
     print(f"n_trees: {n_trees}, n_features: {n_features}, max_depth: {max_depth}, min_samples_leaf: {min_samples_leaf}\n\n")
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, stratify=y)
-    data_train = np.hstack((X_train, y_train.reshape(-1, 1)))
+    data_train = np.hstack((X_train, Y_train.reshape(-1, 1)))
     forest = random_forest(data_train, n_trees=n_trees, n_features=n_features, max_depth=max_depth, min_samples_leaf=min_samples_leaf)
 
-    predictions = np.array([predict_forest(forest, sample) for sample in X_test])
-    accuracy = np.mean(predictions == y_test)
+    predictions = np.array([predict_forest(forest, sample) for sample in X_dev])
+    accuracy = np.mean(predictions == Y_dev)
     # print(f"Random Forest Accuracy: {accuracy:.4f}")
 
-    cm = confusion_matrix(y_test, predictions)
+    cm = confusion_matrix(Y_dev, predictions)
     print("Confusion Matrix:")
     print(cm)
 
@@ -111,11 +110,13 @@ def evaluate_random_forest(n_trees=100, n_features=3, max_depth=5, min_samples_l
     
 def main():
 
-    # After multiple runs, these values seem to give the best results
-    n_tree_values = [100]
-    n_feature_values = [3]
-    max_depth_values = [5]
-    min_samples_leaf_values = [5]
+    X_train_dev, X_test, y_train_dev, y_test = train_test_split(X, y, test_size=0.2, stratify=y)
+    X_train, X_dev, y_train, y_dev = train_test_split(X_train_dev, y_train_dev, test_size=0.2)
+
+    n_tree_values = [50, 100, 200]
+    n_feature_values = [2, 3, 4]
+    max_depth_values = [3, 4, 5, 6]
+    min_samples_leaf_values = [1, 5, 10, 15, 20]
 
 
     results = []
@@ -127,6 +128,10 @@ def main():
         min_samples_leaf_values
     ):
         result = evaluate_random_forest(
+            X_train=X_train,
+            Y_train=y_train,
+            X_dev=X_dev,
+            Y_dev=y_dev,
             n_trees=n_trees,
             n_features=n_features,
             max_depth=max_depth,
@@ -145,6 +150,34 @@ def main():
     results_df = pd.DataFrame(results)
     print("\nRandom Forest Hyperparameter Tuning Results:")
     print(results_df.sort_values("f1_score", ascending=False).reset_index(drop=True)[:200])
+
+    # Show the final model's performance on the test set
+    best_params = results_df.sort_values("f1_score", ascending=False).iloc[0]
+    print("\nBest Hyperparameters:")
+    print(best_params)
+    print("\nEvaluating best model on test set...")
+    final_result = evaluate_random_forest(
+        X_train=X_train,
+        Y_train=y_train,
+        X_dev=X_test,
+        Y_dev=y_test,
+        n_trees=int(best_params["n_trees"]),
+        n_features=int(best_params["n_features"]),
+        max_depth=int(best_params["max_depth"]),
+        min_samples_leaf=int(best_params["min_samples_leaf"]),
+        return_metrics=True
+    )
+
+    print("\nFinal Model Performance on Test Set:")
+    print('Accuracy: {:.4f}'.format(final_result["accuracy"]))
+    print('Specificity: {:.4f}'.format(final_result["specificity"]))
+    print('Sensitivity: {:.4f}'.format(final_result["sensitivity"]))
+    print('Precision: {:.4f}'.format(final_result["precision"]))
+    print('F1 Score: {:.4f}'.format(final_result["f1_score"]))
+
+    # Note: Havent implemented CV and hecne the results might fluctuate a lot.
+    # This is just to understand the working of random forest anyways.
+    # I will implement CV when writing random forest using sklearn.
 
 if __name__ == "__main__":
     main()
