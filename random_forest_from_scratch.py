@@ -111,7 +111,7 @@ def evaluate_random_forest(X_train, Y_train, X_dev, Y_dev, n_trees=100, n_featur
 def main():
 
     X_train_dev, X_test, y_train_dev, y_test = train_test_split(X, y, test_size=0.2, stratify=y)
-    X_train, X_dev, y_train, y_dev = train_test_split(X_train_dev, y_train_dev, test_size=0.2)
+    X_train, X_dev, y_train, y_dev = train_test_split(X_train_dev, y_train_dev, test_size=0.2, stratify=y_train_dev)
 
     n_tree_values = [50, 100, 200]
     n_feature_values = [2, 3, 4]
