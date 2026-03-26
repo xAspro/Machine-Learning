@@ -43,7 +43,7 @@ def prepare_features(features):  # Feature Scaling
     X_scaled = (X - mean) / std
     return X_scaled, mean, std
 
-def sse(X, y, w, b):    # Sum of Squared Errors
+def ss_error(X, y, w, b):    # Sum of Squared Errors
     y_pred = X @ w + b
     return np.sum((y - y_pred) ** 2)
 
@@ -54,7 +54,7 @@ def ss_total(y):   # Total Sum of Squares
 
 def compute_cost(X, y, w, b):   # Mean Squared Error Cost Function
     m = X.shape[0]
-    cost = sse(X, y, w, b) / (2 * m)
+    cost = ss_error(X, y, w, b) / (2 * m)
     return cost
 
 def gradient_descent(X, y, w, b, learning_rate, num_iterations, tol=1e-12):   # Gradient Descent Algorithm
@@ -90,7 +90,7 @@ def gradient_descent(X, y, w, b, learning_rate, num_iterations, tol=1e-12):   # 
     return w, b
 
 def r2_score(x, y, w, b):   # R-squared Calculation
-    sse = sse(x, y, w, b)
+    sse = ss_error(x, y, w, b)
     sst = ss_total(y)
 
     assert sst != 0, "Total Sum of Squares (SST) cannot be zero."
@@ -99,7 +99,7 @@ def r2_score(x, y, w, b):   # R-squared Calculation
     return r2
 
 def f_score(x, y, w, b):   # F-score Calculation
-    sse = sse(x, y, w, b)
+    sse = ss_error(x, y, w, b)
     sst = ss_total(y)
 
     n = x.shape[0]
