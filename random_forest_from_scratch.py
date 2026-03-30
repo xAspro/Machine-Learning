@@ -22,6 +22,7 @@ from sklearn.model_selection import train_test_split
 
 # Random data set for testing the decision tree implementation
 URL = "https://raw.githubusercontent.com/Anny8910/Decision-Tree-Classification-on-Diabetes-Dataset/master/diabetes_dataset.csv"
+TASK = 'classification'     # Change it to 'regression' if you need regression tree
 
 df = pd.read_csv(URL)
 print(df.head())
@@ -45,7 +46,7 @@ def random_forest(data, n_trees=10, n_samples=None, n_features=None, max_depth=d
         # if (i + 1) % 50 == 0:
         #     print(f"\nBuilding tree {i+1}/{n_trees}\ndata.shape[1]: {data.shape[1]}, n_samples: {n_samples}, n_features: {n_features}, max_depth: {max_depth}, min_samples_leaf: {min_samples_leaf}")
         bootstrapped_data = bootstrapping(data, n_samples)
-        tree = decision_tree.build_tree(bootstrapped_data[:, :-1], bootstrapped_data[:, -1].astype(int), max_depth=max_depth, min_samples_leaf=min_samples_leaf, n_features=n_features)
+        tree = decision_tree.build_tree(bootstrapped_data[:, :-1], bootstrapped_data[:, -1].astype(int), max_depth=max_depth, min_samples_leaf=min_samples_leaf, n_features=n_features, task=TASK)
         trees.append(tree)
     return trees
 
