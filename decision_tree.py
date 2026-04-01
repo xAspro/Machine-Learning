@@ -238,6 +238,18 @@ def predict(node, sample):
     else:
         return predict(node.right, sample)
     
+def predict_batch(node, X):
+    if node.prediction is not None:
+        return np.full(X.shape[0], node.prediction)
+    
+    left_indices = X[:, node.feature_index] <= node.threshold
+    right_indices = ~left_indices
+
+    predictions = np.empty(X.shape[0], dtype=float)
+    predictions[left_indices] = predict_batch(node.left, X[left_indices])
+    predictions[right_indices] = predict_batch(node.right, X[right_indices])
+    return predictions
+    
 def evaluate_model(y_true, y_pred, task='classification'):
     if task == 'classification':
         accuracy = np.mean(y_true == y_pred)
