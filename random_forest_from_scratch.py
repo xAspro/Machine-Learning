@@ -24,7 +24,7 @@ def bootstrapping(data, n_samples=None, return_oob_indices=False):
         return data[indices], oob_indices
     return data[indices]
 
-def random_forest(data, n_trees=10, n_samples=None, n_features=None, max_depth=decision_tree.MAX_DEPTH, min_samples_leaf=decision_tree.MIN_SAMPLES_LEAF, task='classification', return_oob_list=False):
+def random_forest(data, n_trees=10, n_samples=None, n_features=None, return_oob_list=False):
     trees = []
     oob_indices_list = []
     for i in range(n_trees):
@@ -37,21 +37,21 @@ def random_forest(data, n_trees=10, n_samples=None, n_features=None, max_depth=d
         else:
             bootstrapped_data = bootstrapping(data, n_samples)
         bootstrapped_x = bootstrapped_data[:, :-1]
-        if task == 'classification':
+        if config['task'] == 'classification':
             bootstrapped_y = bootstrapped_data[:, -1].astype(int)
         else:
             bootstrapped_y = bootstrapped_data[:, -1].astype(float)
 
-        tree = decision_tree.build_tree(bootstrapped_x, bootstrapped_y, max_depth=max_depth, min_samples_leaf=min_samples_leaf, n_features=n_features, task=task)
+        tree = decision_tree.build_tree(bootstrapped_x, bootstrapped_y, max_depth=config['max_depth'], min_samples_leaf=config['min_samples_leaf'], n_features=n_features, task=config['task'])
         trees.append(tree)
     
     if return_oob_list:
         return trees, oob_indices_list
     return trees
 
-def predict_forest(trees, sample, task='classification'):
+def predict_forest(trees, sample):
     predictions = [decision_tree.predict(tree, sample) for tree in trees]
-    if task == 'classification':
+    if config['task'] == 'classification':
         return np.bincount(predictions).argmax()
     return np.mean(predictions)
 
@@ -163,12 +163,12 @@ def evaluate_random_forest(X_train, Y_train, X_dev, Y_dev, n_trees=100, n_featur
 
     data_train = np.hstack((X_train, Y_train.reshape(-1, 1)))
     if perform_oob_evaluation:
-        forest, oob_indices_list = random_forest(data_train, n_trees=n_trees, n_features=n_features, max_depth=max_depth, min_samples_leaf=min_samples_leaf, task=task, return_oob_list=True)
+        forest, oob_indices_list = random_forest(data_train, n_trees=n_trees, n_features=n_features, return_oob_list=True)
         oob_score = evaluate_oob_score(forest, oob_indices_list, data_train, task=task)
     else:
-        forest = random_forest(data_train, n_trees=n_trees, n_features=n_features, max_depth=max_depth, min_samples_leaf=min_samples_leaf, task=task)
+        forest = random_forest(data_train, n_trees=n_trees, n_features=n_features)
 
-    predictions = np.array([predict_forest(forest, sample, task=task) for sample in X_dev])
+    predictions = np.array([predict_forest(forest, sample) for sample in X_dev])
 
     if task == 'classification':
         accuracy = np.mean(predictions == Y_dev)
@@ -222,15 +222,15 @@ def main():
         X_train_dev, X_test, y_train_dev, y_test = train_test_split(X, y, test_size=0.2)
         X_train, X_dev, y_train, y_dev = train_test_split(X_train_dev, y_train_dev, test_size=0.2)
 
-    n_tree_values = [50, 100, 200]
-    n_feature_values = [2, 3, 4]
-    max_depth_values = [3, 4, 5, 6]
-    min_samples_leaf_values = [1, 5, 10, 15, 20]
+    # n_tree_values = [50, 100, 200]
+    # n_feature_values = [2, 3, 4]
+    # max_depth_values = [3, 4, 5, 6]
+    # min_samples_leaf_values = [1, 5, 10, 15, 20]
 
-    # n_tree_values = [100]
-    # n_feature_values = [3]
-    # max_depth_values = [5]
-    # min_samples_leaf_values = [5]
+    n_tree_values = [100]
+    n_feature_values = [3]
+    max_depth_values = [5]
+    min_samples_leaf_values = [5]
 
 
     results = []
