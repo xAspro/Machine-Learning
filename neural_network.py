@@ -4,17 +4,30 @@ import numpy as np
 class Node:
     def __init__(self, name, type_of_node, func, layer, in_nodes, out_nodes, x=None, y=None, weights=None, bias=None):
         """
-        Constructor
-        -----------
-            - name: the name of the node (for debugging purposes)
-            - func: activation function for the node
-            - layer: the layer number this node belongs to
-            - in_nodes: the nodes connected to this particular node
-            - out_nodes: the nodes connected from this particular node
-            - x: the input to the node (optional, will be set during forward pass)
-            - y: the output of the node (optional, will be set during forward pass)
-            - weights: the weights for the connections to the next layer (optional, will be initialized randomly if not provided)
-            - bias: the bias term for the node (optional, will be initialized randomly if not provided)
+        Node constructor.
+
+        Parameters
+        ----------
+        name : str
+            Name of the node for debugging.
+        type_of_node : str
+            'input', 'hidden', or 'output'.
+        func : callable
+            Activation function.
+        layer : int
+            Layer number this node belongs to.
+        in_nodes : list[Node]
+            Incoming nodes to this node.
+        out_nodes : list[Node]
+            Outgoing nodes from this node.
+        x : float, optional
+            Weighted input (computed during forward pass).
+        y : float, optional
+            Node output (computed during forward pass).
+        weights : np.ndarray, optional
+            Weights for incoming connections.
+        bias : float, optional
+            Bias term for the node.
         """
         if type_of_node not in ['input', 'hidden', 'output']:
             raise ValueError("type_of_node must be 'input', 'hidden', or 'output'")
@@ -29,25 +42,17 @@ class Node:
         self.out_nodes = out_nodes
         self.x = x
         self.y = y
-        self.weights = weights if weights is not None else np.random.rand(len(out_nodes))
-        self.bias = bias if bias is not None else np.random.rand(1)
         self.name = name
-
-    def activate(self):
-        """
-        Apply the activation function to the input and return the output
-        """
-        return self.func(self.x + self.bias)
-    
-    def calculate_output(self):
-        """
-        Calculate the output of the node based on the input, weights, and bias
-        """
-        return self.activate() * self.weights
+        if type_of_node != 'input':
+            self.weights = weights if weights is not None else np.random.rand(len(in_nodes))
+            self.bias = bias if bias is not None else np.random.rand()
+        else:
+            self.weights = None
+            self.bias = None
     
 
 class NeuralNetwork:
-    def __init__(self, num_of_nodes_per_layer, activation_function, learning_rate=0.01):
+    def __init__(self, num_of_nodes_per_layer, activation_function, task, learning_rate=0.01):
         """
         Constructor
         -----------
@@ -57,6 +62,7 @@ class NeuralNetwork:
             - learning_rate: the learning rate for training the network
             - num_of_nodes_per_layer: a list containing the number of nodes in each layer
             - activation_function: the activation function to be used in the network
+            - loss_function: the loss function to be used for training the network (determined by the task)
         """
         self.input_layer = None
         self.hidden_layer = None
@@ -66,6 +72,7 @@ class NeuralNetwork:
         self.learning_rate = learning_rate
 
         self.normalise_activation_functions()
+        self.loss_function = self._get_loss_function(task)
 
     def normalise_activation_functions(self):
         """
@@ -102,70 +109,104 @@ class NeuralNetwork:
         output_layer = []
         input_layer = []
         hidden_layer = []
-        out_nodes = []
-        depth = len(self.num_of_nodes_per_layer)
-        node_types = ['input'] + ['hidden'] * (len(self.num_of_nodes_per_layer) - 2) + ['output']
-        for node, af, node_type in zip(reversed(self.num_of_nodes_per_layer), reversed(self.activation_function), reversed(node_types)):
-            layer_nodes = [Node(f"{node_type}_{depth}_{i}", node_type, af[i], depth, [], out_nodes) for i in range(node)]
-            for out_node in out_nodes:
-                out_node.in_nodes.extend(layer_nodes)
-            out_nodes = layer_nodes
-            depth -= 1
+        in_nodes = []
+        depth = 1
 
-            if node_type == 'output':
-                output_layer = layer_nodes
-                print("Output layer created with nodes:", [node.name for node in output_layer])
-                print("depth = ", depth)
-            elif node_type == 'input':
+        n_input = self.num_of_nodes_per_layer[0]
+        n_output = self.num_of_nodes_per_layer[-1]
+
+        node_types = ['input'] + ['hidden'] * (len(self.num_of_nodes_per_layer) - 2) + ['output']
+
+        for node, af, node_type in zip(self.num_of_nodes_per_layer, self.activation_function, node_types):
+            layer_nodes = []
+            for i in range(node):
+                new_node = Node(
+                    name=f"{node_type}_{depth}_{i}",
+                    type_of_node=node_type,
+                    func=af[i],
+                    layer=depth,
+                    in_nodes=in_nodes,
+                    out_nodes=[]
+                )
+                layer_nodes.append(new_node)
+
+            for in_node in in_nodes:
+                in_node.out_nodes.extend(layer_nodes)
+            
+            in_nodes = layer_nodes
+            depth += 1
+
+
+            if node_type == 'input':
                 input_layer = layer_nodes
-                print("Input layer created with nodes:", [node.name for node in input_layer])
-                print("depth = ", depth)
+            elif node_type == 'output':
+                output_layer = layer_nodes
             else:
-                hidden_layer.insert(0, layer_nodes)
-                print(f"Hidden layer {len(hidden_layer)} created with nodes:", [node.name for node in layer_nodes])
-                print("depth = ", depth)
-        
+                hidden_layer.append(layer_nodes)
+
         self.output_layer = output_layer
         self.input_layer = input_layer
         self.hidden_layer = hidden_layer
         return 
             
-    def print_network(self):
+    def print_network(self, with_outputs=False):
         """
         Print the structure of the network
         """
-        print("Input Layer:")
+        print("\nInput Layer:")
         for node in self.input_layer:
-            print(f"  Node {node.name}: activation function: {node.func.__name__}, weights: {node.weights}, bias: {node.bias}, in_nodes: {len(node.in_nodes)}, out_nodes: {len(node.out_nodes)}")
-        
+            print(f"  Node {node.name}: weights: {node.weights}, bias: {node.bias}, in_nodes: {len(node.in_nodes)}, out_nodes: {len(node.out_nodes)}", end="")
+            if with_outputs:
+                print(f", output: {node.y}")
+            else:
+                print()
+
         for i, layer in enumerate(self.hidden_layer):
-            print(f"Hidden Layer {i+1}:")
+            print(f"\nHidden Layer {i+1}:")
             for node in layer:
-                print(f"  Node {node.name}: activation function: {node.func.__name__}, weights: {node.weights}, bias: {node.bias}, in_nodes: {len(node.in_nodes)}, out_nodes: {len(node.out_nodes)}")
+                print(f"  Node {node.name}: weights: {node.weights}, bias: {node.bias}, in_nodes: {len(node.in_nodes)}, out_nodes: {len(node.out_nodes)}", end="")
+                if with_outputs:
+                    print(f", output: {node.y}")
+                else:
+                    print()
         
-        print("Output Layer:")
+        print("\nOutput Layer:")
         for node in self.output_layer:
-            print(f"  Node {node.name}: activation function: {node.func.__name__}, weights: {node.weights}, bias: {node.bias}, in_nodes: {len(node.in_nodes)}, out_nodes: {len(node.out_nodes)}")
+            print(f"  Node {node.name}: weights: {node.weights}, bias: {node.bias}, in_nodes: {len(node.in_nodes)}, out_nodes: {len(node.out_nodes)}", end="")
+            if with_outputs:
+                print(f", output: {node.y}")
+            else:
+                print()
+
+    def _forward_input_layer(self, x):
+        """
+        Forward pass through the input layer (simply sets the output of the input nodes to the input values)
+        """
+        for i, node in enumerate(self.input_layer):
+            node.x = x[i]
+            node.y = node.func(node.x)
+    
+    def _forward_layer(self, layer):
+        """
+        Forward pass through a hidden or output layer
+        """
+        for node in layer:
+            node.x = sum(in_node.y * node.weights[i] for i, in_node in enumerate(node.in_nodes)) + node.bias
+            node.y = node.func(node.x)
 
     def forward_pass(self, x):
         """
         Perform a forward pass through the network
         """
         # Initialises the input layer
-        for i, node in enumerate(self.input_layer):
-            node.x = x[i]
-            node.y = node.activate()
-        
-        # Forward pass through the hidden layer
-        for layer in self.hidden_layer:
-            for node in layer:
-                node.x = sum(in_node.calculate_output() for in_node in node.in_nodes)
-                node.y = node.activate()
+        self._forward_input_layer(x)
 
-        # Forward pas through the output layer
-        for node in self.output_layer:
-            node.x = sum(in_node.calculate_output() for in_node in node.in_nodes)
-            node.y = node.activate()
+        # Forward pass through hidden layers
+        for layer in self.hidden_layer:
+            self._forward_layer(layer)
+
+        # Forward pass through output layer
+        self._forward_layer(self.output_layer)
 
         return [node.y for node in self.output_layer]
     
@@ -175,8 +216,20 @@ class NeuralNetwork:
         """
         pass
 
+    def _get_loss_function(self, task):
+        if task == 'classification':
+            def loss(y_true, y_pred, eps=1e-12):
+                p = np.clip(y_pred, eps, 1 - eps)
+                return -np.mean((y_true * np.log(p)) + ((1 - y_true) * np.log(1 - p)))
+        if task == 'regression':
+            def loss(y_true, y_pred):
+                return np.mean((y_true - y_pred) ** 2)
+        return loss
 
 
-nn = NeuralNetwork(num_of_nodes_per_layer=[3, 1,4, 2], activation_function=[lambda x: max(0, x), lambda x: max(0, x), lambda x: x, lambda x: x])
+
+nn = NeuralNetwork(num_of_nodes_per_layer=[3, 1,4, 2], activation_function=[lambda x: max(0, x), lambda x: max(0, x), lambda x: x, lambda x: x], task='regression')
 nn.create_network()
 nn.print_network()
+nn.forward_pass([1, 2, 3])
+nn.print_network(with_outputs=True)
