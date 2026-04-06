@@ -2,7 +2,7 @@ import numpy as np
 
 
 class Node:
-    def __init__(self, name, type_of_node, func, layer, in_nodes, out_nodes, x=None, y=None, weights=None, bias=None):
+    def __init__(self, name, type_of_node, func, layer, in_nodes, out_nodes, x=None, y=None, weights=None, bias=None, derivative_func=None):
         """
         Node constructor.
 
@@ -32,6 +32,8 @@ class Node:
         if type_of_node not in ['input', 'hidden', 'output']:
             raise ValueError("type_of_node must be 'input', 'hidden', or 'output'")
         if type_of_node == 'input':
+            if func not in [None, 'linear']:
+                print(f"Warning: Input layer activation ignored for {name}. Using identity.")
             func = lambda x: x  # Identity function for input layer
             in_nodes = []  # No incoming connections for input layer
         elif type_of_node == 'output':
@@ -43,16 +45,42 @@ class Node:
         self.x = x
         self.y = y
         self.name = name
+        self.derivative_func = derivative_func
+
         if type_of_node != 'input':
             self.weights = weights if weights is not None else np.random.rand(len(in_nodes))
             self.bias = bias if bias is not None else np.random.rand()
         else:
             self.weights = None
             self.bias = None
+
+        if isinstance(func, str):  # If it's a name, fetch the corresponding function and its derivative
+            self.func, self.derivative_func = self._get_activation_function(func)
+        elif not callable(func) or not callable(self.derivative_func):
+            raise ValueError("If not a name, the activation function and its derivative must be callable.")
+        
+
+    def _get_activation_function(self, name):
+        if name == 'relu':
+            return lambda x: max(0, x), lambda x: 1.0 if x > 0 else 0.0
+        elif name == 'sigmoid':
+            def sigmoid(x):
+                return 1 / (1 + np.exp(-x))
+            def sigmoid_derivative(x):
+                s = sigmoid(x)
+                return s * (1 - s)
+            return sigmoid, sigmoid_derivative
+        elif name == 'tanh':
+            return lambda x: np.tanh(x), lambda x: 1 - np.tanh(x) ** 2
+        elif name == 'linear':
+            return lambda x: x, lambda x: 1.0
+        else:
+            raise ValueError(f"Unsupported activation function name: {name}")
+        
     
 
 class NeuralNetwork:
-    def __init__(self, num_of_nodes_per_layer, activation_function, task, learning_rate=0.01):
+    def __init__(self, num_of_nodes_per_layer, activation_function, task, learning_rate=0.01, derivative_func=None):
         """
         Constructor
         -----------
@@ -70,13 +98,15 @@ class NeuralNetwork:
         self.num_of_nodes_per_layer = num_of_nodes_per_layer
         self.activation_function = activation_function
         self.learning_rate = learning_rate
+        self.derivative_func = derivative_func
 
-        self.normalise_activation_functions()
+        self.normalise_functions()
         self.loss_function = self._get_loss_function(task)
 
-    def normalise_activation_functions(self):
+    def normalise_functions(self):
         """
-        Ensure that the activation function is in the correct format (list of functions for each layer)
+        Ensure that the activation function and derivative of the function is in 
+        the correct format (list of functions for each layer)
         """
         def normalise_layer(func, num_nodes):
             if not isinstance(func, list):
@@ -90,17 +120,28 @@ class NeuralNetwork:
         
         layers = self.num_of_nodes_per_layer
         af = self.activation_function
+        df = self.derivative_func
 
         if not isinstance(af, list):
             af = [af] * len(layers)
-
         elif len(af) != len(layers):
             raise ValueError(
                 f"Length of activation function list must match the number of "
                 f"layers. Expected {len(layers)}, got {len(af)}"
             )
 
+        if df is None:
+            df = [None] * len(layers)
+        elif not isinstance(df, list):
+            df = [df] * len(layers)
+        elif len(df) != len(layers):
+            raise ValueError(
+                f"Length of derivative function list must match the number of "
+                f"layers. Expected {len(layers)}, got {len(df)}"
+            )
+
         self.activation_function = [normalise_layer(val, size) for val, size in zip(af, layers)]
+        self.derivative_func = [normalise_layer(val, size) for val, size in zip(df, layers)]
 
     def create_network(self):
         """
@@ -117,7 +158,7 @@ class NeuralNetwork:
 
         node_types = ['input'] + ['hidden'] * (len(self.num_of_nodes_per_layer) - 2) + ['output']
 
-        for node, af, node_type in zip(self.num_of_nodes_per_layer, self.activation_function, node_types):
+        for node, af, df, node_type in zip(self.num_of_nodes_per_layer, self.activation_function, self.derivative_func, node_types):
             layer_nodes = []
             for i in range(node):
                 new_node = Node(
@@ -126,7 +167,8 @@ class NeuralNetwork:
                     func=af[i],
                     layer=depth,
                     in_nodes=in_nodes,
-                    out_nodes=[]
+                    out_nodes=[],
+                    derivative_func=df[i]
                 )
                 layer_nodes.append(new_node)
 
@@ -228,7 +270,7 @@ class NeuralNetwork:
 
 
 
-nn = NeuralNetwork(num_of_nodes_per_layer=[3, 1,4, 2], activation_function=[lambda x: max(0, x), lambda x: max(0, x), lambda x: x, lambda x: x], task='regression')
+nn = NeuralNetwork(num_of_nodes_per_layer=[3, 1,4, 2], activation_function=[lambda x: max(0, x), lambda x: max(0, x), lambda x: x, lambda x: x], task='regression', derivative_func=[lambda y: y * (1 - y), lambda y: y * (1 - y), lambda y: 1, lambda y: 1])
 nn.create_network()
 nn.print_network()
 nn.forward_pass([1, 2, 3])
