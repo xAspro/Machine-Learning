@@ -1,7 +1,16 @@
 import numpy as np
 import decision_tree
 import pandas as pd
-from sklearn.metrics import confusion_matrix, accuracy_score, precision_score, recall_score, f1_score, classification_report
+from sklearn.metrics import (
+    confusion_matrix, 
+    accuracy_score, 
+    precision_score, 
+    recall_score, 
+    f1_score, 
+    classification_report, 
+    mean_squared_error, 
+    r2_score
+)
 from sklearn.model_selection import train_test_split
 
 TASK = 'classification'  # Change to 'regression' for regression tasks
@@ -20,6 +29,7 @@ def logit(p):
 def predict_classes(logits, cutoff=0.5):
     p = sigmoid(logits)
     return (p >= cutoff).astype(int)
+
 
 def loss_function_reg(y_true, y_pred):
     return np.mean((y_true - y_pred) ** 2)
@@ -57,7 +67,6 @@ def gradient_boosting(X, y, n_trees=100, lr=0.1, max_depth=3, min_samples_leaf=1
         tree = decision_tree.build_tree(
             X, 
             residuals, 
-            # feature_names, 
             max_depth=max_depth, 
             min_samples_leaf=min_samples_leaf, 
             task='regression')
@@ -91,13 +100,13 @@ def evaluate_gradient_boosting(trees, X_test, y_test, initial_pred, lr=0.1):
             'classification_report': class_report
         }
     else:
-        mse = np.mean((y_test - y_pred) ** 2)
+        mse = mean_squared_error(y_test, y_pred)
         rmse = np.sqrt(mse)
-        r2_score = 1 - (np.sum((y_test - y_pred) ** 2) / np.sum((y_test - np.mean(y_test)) ** 2))
+        r2 = r2_score(y_test, y_pred)
         return {
             'mse': mse,
             'rmse': rmse,
-            'r2_score': r2_score
+            'r2_score': r2
         }
 
 def print_tree_simple(node, feature_names, depth=0):
@@ -119,7 +128,10 @@ def print_tree_simple(node, feature_names, depth=0):
 
 
 def main():
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, stratify=y)
+    if config['task'] == 'classification':
+        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, stratify=y)
+    else:
+        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2)
     initial_pred, trees = gradient_boosting(X_train, y_train, n_trees=100, lr=0.1, max_depth=3, min_samples_leaf=1)
 
     # # Uncomment this if you want to see the trees
