@@ -29,6 +29,8 @@ class Node:
             Weights for incoming connections.
         bias : float, optional
             Bias term for the node.
+        derivative_func : callable, optional
+            Derivative of the activation function.
         """
         if type_of_node not in ['input', 'hidden', 'output']:
             raise ValueError("type_of_node must be 'input', 'hidden', or 'output'")
@@ -63,18 +65,36 @@ class Node:
 
     def _get_activation_function(self, name):
         if name == 'relu':
-            return lambda x: max(0, x), lambda x: 1.0 if x > 0 else 0.0
+            def relu(x):
+                x = np.array(x)
+                return np.maximum(0, x)
+            def relu_derivative(x):
+                x = np.array(x)
+                return np.where(x > 0, 1, 0)
+            return relu, relu_derivative
         elif name == 'sigmoid':
             def sigmoid(x):
+                x = np.array(x)
                 return 1 / (1 + np.exp(-x))
             def sigmoid_derivative(x):
+                x = np.array(x)
                 s = sigmoid(x)
                 return s * (1 - s)
             return sigmoid, sigmoid_derivative
         elif name == 'tanh':
-            return lambda x: np.tanh(x), lambda x: 1 - np.tanh(x) ** 2
+            def tanh(x):
+                x = np.array(x)
+                return np.tanh(x)
+            def tanh_derivative(x):
+                x = np.array(x)
+                return 1 - np.tanh(x) ** 2
+            return tanh, tanh_derivative
         elif name == 'linear':
-            return lambda x: x, lambda x: 1.0
+            def linear(x):
+                return np.array(x)
+            def linear_derivative(x):
+                return np.ones_like(x)
+            return linear, linear_derivative
         else:
             raise ValueError(f"Unsupported activation function name: {name}")
         
@@ -85,13 +105,14 @@ class NeuralNetwork:
         """
         Constructor
         -----------
-            - input_layer: list of nodes in the input layer
-            - hidden_layer: list of nodes in the hidden layer
-            - output_layer: list of nodes in the output layer
-            - learning_rate: the learning rate for training the network
-            - num_of_nodes_per_layer: a list containing the number of nodes in each layer
-            - activation_function: the activation function to be used in the network
-            - loss_function: the loss function to be used for training the network (determined by the task)
+        - input_layer: list of nodes in the input layer
+        - hidden_layer: list of nodes in the hidden layer
+        - output_layer: list of nodes in the output layer
+        - learning_rate: the learning rate for training the network
+        - num_of_nodes_per_layer: a list containing the number of nodes in each layer
+        - activation_function: the activation function to be used in the network
+        - loss_function: the loss function to be used for training the network (determined by the task)
+        - derivative_loss_function: the derivative of the loss function (determined by the task)
         """
         self.input_layer = None
         self.hidden_layer = None
@@ -104,6 +125,35 @@ class NeuralNetwork:
         self.normalise_functions()
         self.loss_function = self._get_loss_function(task)
         self.derivative_loss_function = self._get_derivative_loss_function(task)
+
+    
+    def _get_loss_function(self, task):
+        if task == 'classification':
+            def loss(y_true, y_pred, eps=1e-12):
+                y_true = np.array(y_true)
+                y_pred = np.array(y_pred)
+                p = np.clip(y_pred, eps, 1 - eps)
+                return -np.mean((y_true * np.log(p)) + ((1 - y_true) * np.log(1 - p)))
+        if task == 'regression':
+            def loss(y_true, y_pred):
+                y_true = np.array(y_true)
+                y_pred = np.array(y_pred)
+                return np.mean((y_true - y_pred) ** 2)
+        return loss
+
+    def _get_derivative_loss_function(self, task):
+        if task == 'classification':
+            def derivative_loss(y_true, y_pred, eps=1e-12):
+                y_true = np.array(y_true)
+                y_pred = np.array(y_pred)
+                p = np.clip(y_pred, eps, 1 - eps)
+                return (p - y_true) / (p * (1 - p))
+        if task == 'regression':
+            def derivative_loss(y_true, y_pred):
+                y_true = np.array(y_true)
+                y_pred = np.array(y_pred)
+                return -2 * (y_true - y_pred)
+        return derivative_loss
 
     def normalise_functions(self):
         """
@@ -266,7 +316,7 @@ class NeuralNetwork:
 
         # For hidden layers
         for layer in reversed(self.hidden_layer):
-            for node in layer:
+            for i, node in enumerate(layer):
 
                 # # Note: This loop can be avoided if we let every node connect to every other 
                 # # node in the next layer, like we have connected earlier.
@@ -282,7 +332,7 @@ class NeuralNetwork:
 
                 # This code is simpler and achieves the same thing as the above code, since we 
                 # have connected every node to every node in the next layer in order.
-                backward_error = sum(out_node.delta * out_node.weights[i] for i, out_node in enumerate(node.out_nodes))
+                backward_error = sum(out_node.delta * out_node.weights[i] for out_node in node.out_nodes)
 
                 node.delta = backward_error * node.derivative_func(node.x)
 
@@ -295,30 +345,45 @@ class NeuralNetwork:
 
                 node.bias -= self.learning_rate * node.delta
 
+    def train(self, X_train, y_train, X_val, y_val, epochs=1000, tol=1e-9, patience=10):
+        """
+        Train the neural network
+        """
+        prev_loss = float('inf')
+        patience_counter = 0
+        for epoch in range(epochs):
+            total_loss = 0
+            for xi, yi in zip(X_train, y_train):
+                y_pred = self.forward_pass(xi)
 
-    def _get_loss_function(self, task):
-        if task == 'classification':
-            def loss(y_true, y_pred, eps=1e-12):
-                p = np.clip(y_pred, eps, 1 - eps)
-                return -np.mean((y_true * np.log(p)) + ((1 - y_true) * np.log(1 - p)))
-        if task == 'regression':
-            def loss(y_true, y_pred):
-                return np.mean((y_true - y_pred) ** 2)
-        return loss
+                loss = self.loss_function(yi, y_pred)
+                total_loss += loss
 
-    def _get_derivative_loss_function(self, task):
-        if task == 'classification':
-            def derivative_loss(y_true, y_pred, eps=1e-12):
-                p = np.clip(y_pred, eps, 1 - eps)
-                return (p - y_true) / (p * (1 - p))
-        if task == 'regression':
-            def derivative_loss(y_true, y_pred):
-                return -2 * (y_true - y_pred)
-        return derivative_loss
+                self.backward_pass(yi)
+            
+            avg_loss = total_loss / len(X_train)
+            
+            val_loss = self.loss_function(y_val, [self.forward_pass(xi) for xi in X_val])
+            print(f"Validation Loss: {val_loss:.8f}")
+
+            if epoch % 5 == 4:  # Print every 5 epochs
+                print(f"Epoch {epoch+1}/{epochs}, Avg Loss: {avg_loss:.4f}")
+
+            if val_loss < prev_loss - tol:
+                patience_counter = 0
+                prev_loss = val_loss
+            else:
+                patience_counter += 1
+                if patience_counter >= patience:
+                    print(f"Early stopping triggered. Validaiton loss at epoch {epoch+1}: {val_loss:.8f}")
+                    break
 
 
-nn = NeuralNetwork(num_of_nodes_per_layer=[3, 1,4, 2], activation_function=['linear', 'relu', 'sigmoid', 'linear'], task='regression')
+nn = NeuralNetwork(num_of_nodes_per_layer=[3, 1, 4, 2], activation_function=['linear', 'relu', 'sigmoid', 'linear'], task='regression')
 nn.create_network()
 nn.print_network()
 nn.forward_pass([1, 2, 3])
+nn.print_network(with_outputs=True)
+
+nn.train(X_train=[[1, 2, 3], [4, 5, 6]], y_train=[[0.5, 0.7], [0.2, 0.3]], X_val=[[7, 8, 9], [10, 11, 12]], y_val=[[0.4, 0.6], [0.1, 0.2]], epochs=2000, tol=1e-6, patience=10)
 nn.print_network(with_outputs=True)
