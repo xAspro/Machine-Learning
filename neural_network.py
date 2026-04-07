@@ -1,4 +1,5 @@
 import numpy as np
+from itertools import chain
 
 
 class Node:
@@ -34,7 +35,7 @@ class Node:
         if type_of_node == 'input':
             if func not in [None, 'linear']:
                 print(f"Warning: Input layer activation ignored for {name}. Using identity.")
-            func = lambda x: x  # Identity function for input layer
+            func = 'linear'
             in_nodes = []  # No incoming connections for input layer
         elif type_of_node == 'output':
             out_nodes = []  # No outgoing connections for output layer
@@ -102,6 +103,7 @@ class NeuralNetwork:
 
         self.normalise_functions()
         self.loss_function = self._get_loss_function(task)
+        self.derivative_loss_function = self._get_derivative_loss_function(task)
 
     def normalise_functions(self):
         """
@@ -256,7 +258,43 @@ class NeuralNetwork:
         """
         Perform a backward pass through the netwrok and update the weights and biases
         """
-        pass
+        
+        # For output layer
+        for i, node in enumerate(self.output_layer):
+            error = self.derivative_loss_function(y_true[i], node.y)
+            node.delta = error * node.derivative_func(node.x)
+
+        # For hidden layers
+        for layer in reversed(self.hidden_layer):
+            for node in layer:
+
+                # # Note: This loop can be avoided if we let every node connect to every other 
+                # # node in the next layer, like we have connected earlier.
+                # # I am still having this code, in case, we decide to remove some connections 
+                # # in the future for experimentation purposes.
+                # # Uncomment this part of the code if we decide to remove some connections later.
+
+                # backward_error = 0
+                # for out_node in node.out_nodes:
+                #     idx = out_node.in_nodes.index(node)
+                #     backward_error += out_node.delta * out_node.weights[idx]
+
+
+                # This code is simpler and achieves the same thing as the above code, since we 
+                # have connected every node to every node in the next layer in order.
+                backward_error = sum(out_node.delta * out_node.weights[i] for i, out_node in enumerate(node.out_nodes))
+
+                node.delta = backward_error * node.derivative_func(node.x)
+
+        # Updating weights and biases
+
+        for layer in chain(self.hidden_layer, [self.output_layer]):
+            for node in layer:
+                for i, in_node in enumerate(node.in_nodes):
+                    node.weights[i] -= self.learning_rate * node.delta * in_node.y
+
+                node.bias -= self.learning_rate * node.delta
+
 
     def _get_loss_function(self, task):
         if task == 'classification':
@@ -268,9 +306,18 @@ class NeuralNetwork:
                 return np.mean((y_true - y_pred) ** 2)
         return loss
 
+    def _get_derivative_loss_function(self, task):
+        if task == 'classification':
+            def derivative_loss(y_true, y_pred, eps=1e-12):
+                p = np.clip(y_pred, eps, 1 - eps)
+                return (p - y_true) / (p * (1 - p))
+        if task == 'regression':
+            def derivative_loss(y_true, y_pred):
+                return -2 * (y_true - y_pred)
+        return derivative_loss
 
 
-nn = NeuralNetwork(num_of_nodes_per_layer=[3, 1,4, 2], activation_function=[lambda x: max(0, x), lambda x: max(0, x), lambda x: x, lambda x: x], task='regression', derivative_func=[lambda y: y * (1 - y), lambda y: y * (1 - y), lambda y: 1, lambda y: 1])
+nn = NeuralNetwork(num_of_nodes_per_layer=[3, 1,4, 2], activation_function=['linear', 'relu', 'sigmoid', 'linear'], task='regression')
 nn.create_network()
 nn.print_network()
 nn.forward_pass([1, 2, 3])
