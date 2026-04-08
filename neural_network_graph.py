@@ -1,5 +1,6 @@
 import numpy as np
 from itertools import chain
+from sklearn.model_selection import train_test_split
 
 
 class Node:
@@ -345,11 +346,11 @@ class NeuralNetwork:
 
                 node.bias -= self.learning_rate * node.delta
 
-    def train(self, X_train, y_train, X_val, y_val, epochs=1000, tol=1e-9, patience=10):
+    def train(self, X_train, y_train, X_val, y_val, epochs=1000, tol=1e-6, patience=10):
         """
         Train the neural network
         """
-        prev_loss = float('inf')
+        best_loss = float('inf')
         patience_counter = 0
         for epoch in range(epochs):
             total_loss = 0
@@ -369,21 +370,45 @@ class NeuralNetwork:
             if epoch % 5 == 4:  # Print every 5 epochs
                 print(f"Epoch {epoch+1}/{epochs}, Avg Loss: {avg_loss:.4f}")
 
-            if val_loss < prev_loss - tol:
+            if val_loss < best_loss - tol:
                 patience_counter = 0
-                prev_loss = val_loss
+                best_loss = val_loss
             else:
                 patience_counter += 1
                 if patience_counter >= patience:
                     print(f"Early stopping triggered. Validaiton loss at epoch {epoch+1}: {val_loss:.8f}")
                     break
 
-
-nn = NeuralNetwork(num_of_nodes_per_layer=[3, 1, 4, 2], activation_function=['linear', 'relu', 'sigmoid', 'linear'], task='regression')
+np.random.seed(42)
+nn = NeuralNetwork(num_of_nodes_per_layer=[3, 1, 4, 2], activation_function=['linear', 'relu', 'sigmoid', 'linear'], task='regression', learning_rate=0.0005)
 nn.create_network()
 nn.print_network()
 nn.forward_pass([1, 2, 3])
 nn.print_network(with_outputs=True)
 
-nn.train(X_train=[[1, 2, 3], [4, 5, 6]], y_train=[[0.5, 0.7], [0.2, 0.3]], X_val=[[7, 8, 9], [10, 11, 12]], y_val=[[0.4, 0.6], [0.1, 0.2]], epochs=2000, tol=1e-6, patience=10)
+
+X = np.random.uniform(0, 10, (100, 3))
+print("\nFirst 5 samples of X:")
+print(X[:5])
+w = np.array([[2.0, -1.5, 0.5], [2.0, 0.2, -1.0]]).T
+print("weight vectors:")
+print(w)
+b = np.array([4.0, -1.3])
+print("bias vectors:")
+print(b)
+noise = np.random.normal(0, 1, (100, 2))
+print("First 5 noise values:")
+print(noise[:5])
+y = X @ w + b + noise
+print("First 5 labels of y:")
+print(y[:5])
+
+X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=0.2, random_state=42)
+
+X_mean = X_train.mean(axis=0)
+X_std = X_train.std(axis=0)
+X_train_norm = (X_train - X_mean) / X_std
+X_val_norm = (X_val - X_mean) / X_std
+
+nn.train(X_train_norm, y_train, X_val_norm, y_val, epochs=50000, tol=1e-5, patience=100)
 nn.print_network(with_outputs=True)
