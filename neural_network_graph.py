@@ -380,7 +380,7 @@ class NeuralNetwork:
                     break
 
 np.random.seed(42)
-nn = NeuralNetwork(num_of_nodes_per_layer=[3, 1, 4, 2], activation_function=['linear', 'relu', 'sigmoid', 'linear'], task='regression', learning_rate=0.0005)
+nn = NeuralNetwork(num_of_nodes_per_layer=[3, 2, 2, 2], activation_function=['linear', 'relu', 'relu', 'linear'], task='regression', learning_rate=0.001)
 nn.create_network()
 nn.print_network()
 nn.forward_pass([1, 2, 3])
@@ -410,5 +410,5 @@ X_std = X_train.std(axis=0)
 X_train_norm = (X_train - X_mean) / X_std
 X_val_norm = (X_val - X_mean) / X_std
 
-nn.train(X_train_norm, y_train, X_val_norm, y_val, epochs=50000, tol=1e-5, patience=100)
+nn.train(X_train_norm, y_train, X_val_norm, y_val, epochs=1000, tol=1e-6, patience=50)
 nn.print_network(with_outputs=True)
